@@ -81,6 +81,22 @@ public class AutoCompleteView extends FrameLayout {
 
     private OnClipboardListener mCallback;
 
+    // Chrome-style "current page" card (title + url + share/copy/edit).
+    private View mCurrentPageView;
+    private TextView mCurrentPageTitle;
+    private TextView mCurrentPageUrl;
+    @Nullable private String mCurrentPageUri;
+    private OnCurrentPageListener mCurrentPageListener;
+    // True after the pencil: the card stays pinned above the suggestions while
+    // the field still holds exactly the current URL (Chrome behaviour).
+    private boolean mCurrentPageSticky;
+
+    public interface OnCurrentPageListener {
+        void onCurrentPageShare(String url);
+        void onCurrentPageCopy(String url);
+        void onCurrentPageEdit(String url);
+    }
+
     public interface OnClipboardListener{
         void onClipboardClick(CharSequence text);
 
@@ -157,6 +173,26 @@ public class AutoCompleteView extends FrameLayout {
 
         mClipboardView = v.findViewById(R.id.clipboard_view);
 
+        mCurrentPageView = v.findViewById(R.id.current_page_view);
+        mCurrentPageTitle = v.findViewById(R.id.current_page_title);
+        mCurrentPageUrl = v.findViewById(R.id.current_page_url);
+        v.findViewById(R.id.current_page_share).setOnClickListener(b -> {
+            if (mCurrentPageListener != null && mCurrentPageUri != null)
+                mCurrentPageListener.onCurrentPageShare(mCurrentPageUri);
+        });
+        v.findViewById(R.id.current_page_copy).setOnClickListener(b -> {
+            if (mCurrentPageListener != null && mCurrentPageUri != null)
+                mCurrentPageListener.onCurrentPageCopy(mCurrentPageUri);
+        });
+        v.findViewById(R.id.current_page_edit).setOnClickListener(b -> {
+            if (mCurrentPageListener != null && mCurrentPageUri != null)
+                mCurrentPageListener.onCurrentPageEdit(mCurrentPageUri);
+        });
+        mCurrentPageView.setOnClickListener(b -> {
+            if (mCurrentPageListener != null && mCurrentPageUri != null)
+                mCurrentPageListener.onCurrentPageEdit(mCurrentPageUri);
+        });
+
         //Avoid blinking
         mSearchView.setItemAnimator(null);
 
@@ -211,6 +247,26 @@ public class AutoCompleteView extends FrameLayout {
         // 2. Clipboard card background
         if (mClipboardView instanceof MaterialCardView card) {
             card.setCardBackgroundColor(surfaceContainerHighest);
+        }
+
+        // 2b. Current-page card
+        if (mCurrentPageView instanceof MaterialCardView card) {
+            card.setCardBackgroundColor(surfaceContainerHighest);
+        }
+        if (mCurrentPageTitle != null) mCurrentPageTitle.setTextColor(onSurfaceColor);
+        if (mCurrentPageUrl != null) {
+            mCurrentPageUrl.setTextColor(IncognitoColors.getPrimary(activity, incognito));
+        }
+        View currentChip = findViewById(R.id.current_page_icon_chip);
+        if (currentChip != null) {
+            currentChip.setBackgroundTintList(ColorStateList.valueOf(
+                    IncognitoColors.getSurfaceContainerHigh(activity, incognito)));
+        }
+        ImageViewCompat.setImageTintList(findViewById(R.id.current_page_icon),
+                ColorStateList.valueOf(onSurfaceVariant));
+        int[] actionIds = {R.id.current_page_share, R.id.current_page_copy, R.id.current_page_edit};
+        for (int id : actionIds) {
+            ImageViewCompat.setImageTintList(findViewById(id), ColorStateList.valueOf(onSurfaceColor));
         }
 
         // 3. Clipboard title
@@ -273,6 +329,45 @@ public class AutoCompleteView extends FrameLayout {
         }
     }
 
+    public void setCurrentPageListener(OnCurrentPageListener listener) {
+        mCurrentPageListener = listener;
+    }
+
+    /** Sets the page shown in the current-page card; null/blank hides it
+     *  (home, about:blank, new tab). */
+    public void setCurrentPage(@Nullable String title, @Nullable String url) {
+        if (url == null || url.isEmpty() || url.startsWith("about:")) {
+            mCurrentPageUri = null;
+        } else {
+            mCurrentPageUri = url;
+            mCurrentPageUrl.setText(url);
+            mCurrentPageTitle.setText(title == null || title.isEmpty() || title.startsWith("about:") ? url : title);
+        }
+        if (!mEmptyState && !mCurrentPageSticky) mCurrentPageView.setVisibility(View.GONE);
+        else updateCurrentPageVisibility();
+    }
+
+    /** Keep the card visible above the suggestion list (pencil tapped). */
+    public void setCurrentPageSticky(boolean sticky) {
+        mCurrentPageSticky = sticky;
+        if (mCurrentPageView == null) return;
+        mCurrentPageView.setVisibility(
+                sticky && mCurrentPageUri != null ? View.VISIBLE : (mEmptyState && mCurrentPageUri != null ? View.VISIBLE : View.GONE));
+    }
+
+    public boolean isCurrentPageSticky() {
+        return mCurrentPageSticky;
+    }
+
+    public boolean isCurrentPageUri(@Nullable String text) {
+        return mCurrentPageUri != null && mCurrentPageUri.equals(text);
+    }
+
+    private void updateCurrentPageVisibility() {
+        if (mCurrentPageView == null) return;
+        mCurrentPageView.setVisibility(mEmptyState && mCurrentPageUri != null ? View.VISIBLE : View.GONE);
+    }
+
     public void setClipboardCallback(OnClipboardListener onClipboardListener){
         mCallback = onClipboardListener;
     }
@@ -330,7 +425,9 @@ public class AutoCompleteView extends FrameLayout {
      *  transition to/from typing is a pure visibility flip with no list diff. */
     public void showEmpty() {
         mEmptyState = true;
+        mCurrentPageSticky = false;
         showClipboard();
+        updateCurrentPageVisibility();
         mSearchView.setVisibility(View.GONE);
         // Hide the container card too, otherwise its filled surface would
         // show as an empty panel under the address bar with no rows in it.
@@ -343,6 +440,10 @@ public class AutoCompleteView extends FrameLayout {
     public void hideAll(){
         mEmptyState = false;
         hideClipboard();
+        if (mCurrentPageView != null) {
+            mCurrentPageView.setVisibility(
+                    mCurrentPageSticky && mCurrentPageUri != null ? View.VISIBLE : View.GONE);
+        }
         if (mMostVisitedCard != null) mMostVisitedCard.setVisibility(View.GONE);
         mSearchView.setVisibility(View.VISIBLE);
         if (mSearchCard != null) mSearchCard.setVisibility(View.VISIBLE);
