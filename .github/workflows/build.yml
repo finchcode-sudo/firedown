@@ -25,9 +25,9 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" "platforms;android-37.1" || \
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" "platforms;android-37"
 
-      # firedown-ffmpeg / firedown-geckoview are fetched by settings.gradle.
-      # If those repos are private, add a secret PREBUILTS_TOKEN (a PAT with
-      # read access to them); otherwise the default token is used.
+      # settings.gradle downloads the prebuilt FFmpeg libs from the public
+      # solarizeddev/firedown-ffmpeg release; GeckoView comes from Mozilla's
+      # public maven (stock build, not the author's private patched one).
       - name: Build release APK
         env:
           GITHUB_TOKEN: ${{ secrets.PREBUILTS_TOKEN || github.token }}
