@@ -62,7 +62,7 @@ jobs:
         run: |
           chmod +x gradlew scripts/fetch-prebuilts.sh
           set -o pipefail
-          ./gradlew assembleRelease --no-daemon --console=plain 2>&1 | tee build.log
+          ./gradlew assembleRelease -Pfiredown.mappingUpload=false -Pfiredown.releaseStatus=false --no-daemon --console=plain 2>&1 | tee build.log
 
       # On failure, print only the useful lines so they are easy to copy.
       - name: Show error summary
