@@ -11,17 +11,8 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        // GeckoView resolves EXCLUSIVELY from our local build in ~/.m2 — never
-        // from maven.mozilla.org or any other internet repo. This guarantees the
-        // app links the in-house patched GeckoView (0001–0006), and FAILS LOUDLY
-        // if the local AAR hasn't been published yet rather than silently falling
-        // back to Mozilla's official build. (exclusiveContent is two-way: the
-        // org.mozilla.geckoview group comes only from mavenLocal, and mavenLocal
-        // is used only for that group — it won't shadow other deps.)
-        exclusiveContent {
-            forRepository { mavenLocal() }
-            filter { includeGroup "org.mozilla.geckoview" }
-        }
+        // STOCK GeckoView: resolved from maven.mozilla.org (public). The in-house
+        // patched build is private, so this fork uses Mozilla's official AAR.
         google()
         mavenCentral()
         maven { url "https://maven.mozilla.org/maven2" }
@@ -45,7 +36,7 @@ if (providers.gradleProperty("firedown.fetchPrebuilts").getOrElse("true") != "fa
     // client console) — NOT inheritIO(): under the daemon that writes to the
     // daemon's own stdout, i.e. its log file, so a download would look like a
     // silent hang and the fetch's error text would never reach the user.
-    def pb = new ProcessBuilder("bash", script.path, "ensure").directory(rootDir).redirectErrorStream(true)
+    def pb = new ProcessBuilder("bash", script.path, "ffmpeg").directory(rootDir).redirectErrorStream(true)
     pb.environment().put("FIREDOWN_FFMPEG_RELEASE", providers.gradleProperty("firedown.ffmpegRelease").get())
     pb.environment().put("FIREDOWN_GECKOVIEW_VERSION", providers.gradleProperty("firedown.geckoviewVersion").get())
     def proc = pb.start()
