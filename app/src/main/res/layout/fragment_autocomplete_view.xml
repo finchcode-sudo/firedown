@@ -7,6 +7,16 @@
     android:orientation="vertical">
 
     <include
+        android:id="@+id/current_page_view"
+        layout="@layout/fragment_autocomplete_current_page"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/address_bar_margin"
+        android:layout_marginEnd="@dimen/address_bar_margin"
+        android:layout_marginTop="6dp"
+        android:visibility="gone" />
+
+    <include
         android:id="@+id/clipboard_view"
         layout="@layout/fragment_autocomplete_clipboard_view"
         android:layout_width="match_parent"
