@@ -33,7 +33,14 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.PREBUILTS_TOKEN || github.token }}
         run: |
           chmod +x gradlew scripts/fetch-prebuilts.sh
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          set -o pipefail
+          ./gradlew assembleRelease --no-daemon --console=plain 2>&1 | tee build.log
+
+      # On failure, print only the useful lines so they are easy to copy.
+      - name: Show error summary
+        if: failure()
+        run: |
+          grep -nE "\[prebuilts\]|ERROR|What went wrong|Caused by:|error:|FAILED" -A2 build.log | head -80
 
       # assembleRelease is unsigned; sign it so it can be installed.
       # Optional secrets for a stable key: KEYSTORE_BASE64, KEYSTORE_PASSWORD,
