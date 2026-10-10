@@ -486,6 +486,37 @@ public class BrowserFragment extends BaseBrowserFragment
             }
         });
 
+        mAutoCompleteView.setCurrentPageListener(new AutoCompleteView.OnCurrentPageListener() {
+            @Override
+            public void onCurrentPageShare(String url) {
+                Intent send = new Intent(Intent.ACTION_SEND);
+                send.setType("text/plain");
+                send.putExtra(Intent.EXTRA_TEXT, url);
+                startActivity(Intent.createChooser(send, getString(R.string.share)));
+            }
+
+            @Override
+            public void onCurrentPageCopy(String url) {
+                android.content.ClipboardManager cm = (android.content.ClipboardManager)
+                        mActivity.getSystemService(android.content.Context.CLIPBOARD_SERVICE);
+                if (cm != null) {
+                    cm.setPrimaryClip(android.content.ClipData.newPlainText("url", url));
+                }
+            }
+
+            @Override
+            public void onCurrentPageEdit(String url) {
+                // Put the full URL in the field, select it all, and let the
+                // normal typed-text path swap the panel to suggestions.
+                mAutoCompleteEditText.setText(url, false);
+                // Chrome: cursor at the end, NOT select-all.
+                mAutoCompleteEditText.setSelection(mAutoCompleteEditText.length());
+                mAutoCompleteView.hideAll();
+                mAutoCompleteView.setCurrentPageSticky(true);
+                mAutoCompleteViewModel.search(url);
+            }
+        });
+
         mSearchAutocompleteAdapter = new SearchAutocompleteAdapter(mActivity, new SearchDiffCallback(), this);
         mAutoCompleteView.getRecyclerView().setAdapter(mSearchAutocompleteAdapter);
 
@@ -1461,6 +1492,11 @@ public class BrowserFragment extends BaseBrowserFragment
                 mAutoCompleteViewModel.loadMostVisited();
                 mAutoCompleteView.showEmpty();
             } else {
+                if (mAutoCompleteView.isCurrentPageSticky()
+                        && !mAutoCompleteView.isCurrentPageUri(afterText)) {
+                    mAutoCompleteView.setCurrentPageSticky(false);
+                    mAutoCompleteView.hideAll();
+                }
                 mAutoCompleteViewModel.search(afterText);
             }
         }
@@ -1506,6 +1542,10 @@ public class BrowserFragment extends BaseBrowserFragment
             // strip; showEmpty reveals it when it has tiles); blur → clear.
             if (hasFocus) {
                 mAutoCompleteViewModel.loadMostVisited();
+                if (geckoState != null) {
+                    mAutoCompleteView.setCurrentPage(geckoState.getEntityTitle(),
+                            geckoState.getEntityUri());
+                }
             } else {
                 mAutoCompleteViewModel.resetEngines();
             }
