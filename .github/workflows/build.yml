@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -25,9 +28,6 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" "platforms;android-37.1" || \
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" "platforms;android-37"
 
-      # The author's prebuilt FFmpeg release is not downloadable, so build the
-      # same libs from the public firedown-ffmpeg source (arm64-v8a only, which is
-      # all the app ships). Cached, so only the first run is slow.
       - name: Cache FFmpeg libs
         id: ffcache
         uses: actions/cache@v4
@@ -53,9 +53,6 @@ jobs:
           echo "firedown-ffmpeg release $TAG (built in CI)" > external/ffmpeg/version.txt
           ls external/ffmpeg/lib/arm64-v8a
 
-      # settings.gradle downloads the prebuilt FFmpeg libs from the public
-      # solarizeddev/firedown-ffmpeg release; GeckoView comes from Mozilla's
-      # public maven (stock build, not the author's private patched one).
       - name: Build release APK
         env:
           GITHUB_TOKEN: ${{ secrets.PREBUILTS_TOKEN || github.token }}
@@ -64,16 +61,30 @@ jobs:
           set -o pipefail
           ./gradlew assembleRelease -Pfiredown.mappingUpload=false -Pfiredown.releaseStatus=false --no-daemon --console=plain 2>&1 | tee build.log
 
-      # On failure, print only the useful lines so they are easy to copy.
       - name: Show error summary
         if: failure()
         run: |
           grep -nE "\[prebuilts\]|ERROR|What went wrong|Caused by:|error:|FAILED" -A2 build.log | head -80
 
-      # assembleRelease is unsigned; sign it so it can be installed.
-      # Optional secrets for a stable key: KEYSTORE_BASE64, KEYSTORE_PASSWORD,
-      # KEY_ALIAS. Without them a throw-away key is made (updates over an
-      # older build will then fail to install).
+      - name: Back up dependencies to a Release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="$(sed -n 's/^firedown.geckoviewVersion=//p' gradle.properties | head -1)"
+          TAG="deps-backup-geckoview-$VER"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Backup $TAG already exists, skipping."; exit 0
+          fi
+          mkdir -p backup/geckoview
+          find "$HOME/.gradle" -path '*org.mozilla.geckoview*' \( -name '*.aar' -o -name '*.pom' -o -name '*.module' \) \
+            -exec cp {} backup/geckoview/ \;
+          ls -la backup/geckoview
+          tar -czf backup/ffmpeg-libs.tar.gz external/ffmpeg
+          gh release create "$TAG" backup/geckoview/* backup/ffmpeg-libs.tar.gz \
+            --title "Dependency backup (GeckoView $VER + FFmpeg)" \
+            --notes "Copies of org.mozilla.geckoview:geckoview:$VER (from maven.mozilla.org) and the FFmpeg libs built from solarizeddev/firedown-ffmpeg."
+
       - name: Sign APK
         env:
           KS_B64: ${{ secrets.KEYSTORE_BASE64 }}
