@@ -215,8 +215,30 @@ public class DownloadFragment extends BaseDownloadFragment implements
         return headers;
     }
 
+    // --- Load watchdog -------------------------------------------------------
+    // The list spinner only goes away when the paging refresh reaches NotLoading.
+    // If that never happens (a stalled paging generation), retry the refresh once
+    // after 4s. A refresh that FAILS (LoadState.Error) is shown on screen below
+    // instead of leaving the spinner up forever.
+    private final android.os.Handler mLoadWatchdog =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private boolean mRefreshSeen;
+    private String mLastLoadState = "none";
+
+    private void startLoadWatchdog() {
+        mRefreshSeen = false;
+        mLoadWatchdog.removeCallbacksAndMessages(null);
+        mLoadWatchdog.postDelayed(() -> {
+            if (!mRefreshSeen && mAdapter != null) {
+                Log.w(TAG, "downloads list still loading after 4s, forcing refresh");
+                mAdapter.refresh();
+            }
+        }, 4000);
+    }
+
     @Override
     public void onDestroyView() {
+        mLoadWatchdog.removeCallbacksAndMessages(null);
         mAdapter = null;
         mSafeFolderAdapter = null;
         mCloudBannerAdapter = null;
@@ -265,6 +287,7 @@ public class DownloadFragment extends BaseDownloadFragment implements
 
         mAdapter.addLoadStateListener(loadStates -> {
             if (mAdapter == null || mLCEERecyclerView == null) return null;
+            mLastLoadState = String.valueOf(loadStates.getRefresh());
             // Third diagnostic checkpoint: the differ's observable output.
             // A refresh that reaches NotLoading here presented the new
             // generation; a generation that was submitted but never gets
@@ -274,6 +297,7 @@ public class DownloadFragment extends BaseDownloadFragment implements
                         + " items=" + mAdapter.getItemCount());
             }
             if (loadStates.getRefresh() instanceof LoadState.NotLoading) {
+                mRefreshSeen = true;
                 // A filter change deferred its presentation flip to here —
                 // the new generation is presented, flip atomically with it.
                 applyPendingPresentation();
@@ -328,9 +352,28 @@ public class DownloadFragment extends BaseDownloadFragment implements
                     }
                 }
                 handleTransitionTiming();
+            } else if (loadStates.getRefresh() instanceof LoadState.Error errorState) {
+                // Previously ONLY NotLoading was handled, so a failed load (DB or
+                // paging exception) left the spinner up forever. Stop the spinner
+                // and show the real error so it is visible and fixable.
+                mRefreshSeen = true;
+                Throwable t = errorState.getError();
+                Log.e(TAG, "downloads list refresh failed", t);
+                StringBuilder sb = new StringBuilder(t.getClass().getName())
+                        .append(": ").append(t.getMessage());
+                Throwable cause = t.getCause();
+                for (int depth = 0; cause != null && depth < 3; depth++) {
+                    sb.append("\n<- ").append(cause.getClass().getName())
+                            .append(": ").append(cause.getMessage());
+                    cause = cause.getCause();
+                }
+                mLCEERecyclerView.setEmptyText(sb.toString());
+                mLCEERecyclerView.setEmptyButtonVisibility(View.GONE);
+                mLCEERecyclerView.showEmpty();
             }
             return null;
         });
+        startLoadWatchdog();
     }
 
     private void setupToolbar() {
