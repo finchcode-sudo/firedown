@@ -367,9 +367,15 @@ public class DownloadFragment extends BaseDownloadFragment implements
                             .append(": ").append(cause.getMessage());
                     cause = cause.getCause();
                 }
-                mLCEERecyclerView.setEmptyText(sb.toString());
                 mLCEERecyclerView.setEmptyButtonVisibility(View.GONE);
                 mLCEERecyclerView.showEmpty();
+                if (getContext() != null) {
+                    new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                            .setTitle("下载列表加载失败")
+                            .setMessage(sb.toString())
+                            .setPositiveButton(android.R.string.ok, null)
+                            .show();
+                }
             }
             return null;
         });
