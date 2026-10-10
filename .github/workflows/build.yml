@@ -25,6 +25,34 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" "platforms;android-37.1" || \
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" "platforms;android-37"
 
+      # The author's prebuilt FFmpeg release is not downloadable, so build the
+      # same libs from the public firedown-ffmpeg source (arm64-v8a only, which is
+      # all the app ships). Cached, so only the first run is slow.
+      - name: Cache FFmpeg libs
+        id: ffcache
+        uses: actions/cache@v4
+        with:
+          path: external/ffmpeg
+          key: ffmpeg-${{ hashFiles('gradle.properties') }}-arm64-v1
+
+      - name: Build FFmpeg from source
+        if: steps.ffcache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson nasm ninja-build
+          git clone --depth 1 https://github.com/solarizeddev/firedown-ffmpeg.git ffmpeg-src
+          cd ffmpeg-src
+          export ANDROID_SDK_HOME="$ANDROID_HOME"
+          export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          ./ffmpeg-android-maker.sh -dav1d -abis=arm64-v8a
+          cd ..
+          mkdir -p external/ffmpeg/lib
+          cp -r ffmpeg-src/output/lib/arm64-v8a external/ffmpeg/lib/
+          cp -r ffmpeg-src/output/include/arm64-v8a external/ffmpeg/include
+          TAG="$(sed -n 's/^firedown.ffmpegRelease=//p' gradle.properties | head -1)"
+          echo "firedown-ffmpeg release $TAG (built in CI)" > external/ffmpeg/version.txt
+          ls external/ffmpeg/lib/arm64-v8a
+
       # settings.gradle downloads the prebuilt FFmpeg libs from the public
       # solarizeddev/firedown-ffmpeg release; GeckoView comes from Mozilla's
       # public maven (stock build, not the author's private patched one).
